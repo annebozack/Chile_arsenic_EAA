@@ -20,6 +20,9 @@ library(gridExtra)
 library(Metrics)
 library(sas7bdat)
 library(corrplot)
+library(MASS)
+library(lmtest)
+library(sandwich)
 ```
 
 ## PBMCs
@@ -28,10 +31,10 @@ library(corrplot)
 
 #### Normalization using funnorm
 ```{r, eval=FALSE, echo = TRUE}
-setwd('Chile_arsenic_epigenetic_aging')
+path = file.path('/Users/annebozack/Box/Chile_arsenic_epigenetic_aging')
 
 # load RGset
-load("pmbcs_RGset.rdata")
+load(paste0(path, "/pmbcs_RGset.rdata"))
 
 # Funnorm
 funnorm = preprocessFunnorm(RGset)
@@ -54,7 +57,7 @@ table(pheno$sex, pheno$predictedSex)
   # M  1 20  
   
 # save the processed betas and pheno data
-save(betas_fun, pheno, file = "PBMC_betas_funnorm_pheno.RData")
+save(betas_fun, pheno, file = paste0(path, "/PBMC_betas_funnorm_pheno.RData"))
 ```
 
 #### Process data for dnamage
@@ -63,7 +66,7 @@ save(betas_fun, pheno, file = "PBMC_betas_funnorm_pheno.RData")
 # load('PBMC_betas_funnorm_pheno.RData')
 
 # filtering beta values using CpGs from https://dnamage.genetics.ucla.edu/new
-datMiniAnnotation=read.csv("datMiniAnnotation3.csv")
+datMiniAnnotation=read.csv(paste0(path, "/datMiniAnnotation3.csv"))
 dim(datMiniAnnotation)
 # 30084     7
 
@@ -94,7 +97,7 @@ sum(is.na(betas_fun_reduced[,2]))
 # 2558
 
 # save filtered probes
-write.table(betas_fun_reduced,"PBMC_Betas_funnorm_reduced_for_clock.csv", row.names=F, sep="," )
+write.table(betas_fun_reduced, paste0(path, "/PBMC_Betas_funnorm_reduced_for_clock.csv"), row.names=F, sep="," )
 
 # pheno/annotation file
 pheno$Female[pheno$sex == 'F'] = 1
@@ -108,7 +111,7 @@ identical(ageAnno$ID, colnames(betas_fun_reduced)[-1])
 # TRUE
 
 # save annotation file
-write.table(ageAnno,"PBMCs_anno_for_clock.csv", row.names=F, sep="," )
+write.table(ageAnno, paste0(path, "/PBMCs_anno_for_clock.csv"), row.names=F, sep="," )
 ```
 
 #### DNA methylation age calculator
@@ -125,7 +128,7 @@ IEAA = intrinsic epigenetic age (derived from Horvath's acceleration; adjusting 
 
 ```{r, message=FALSE, warning=FALSE, eval=F}
 # load result
-PBMC_age = read.csv('PBMC_Betas_funnorm_reduced_for_clock.output.csv')
+PBMC_age = read.csv(paste0(path, '/PBMC_Betas_funnorm_reduced_for_clock.output.csv'))
 PBMC_age$SampleID = substr(PBMC_age$SampleID, 2, nchar(PBMC_age$SampleID))
 
 all(PBMC_age$SampleID == pheno$sample_name)
@@ -160,7 +163,7 @@ table(pheno$sex, pheno$predictedSex)
 pheno$ID2 = as.numeric(substring(pheno$study_id, 3, 9))
 
 # add additional exposure variables and rename pheno
-all_pheno = read.sas7bdat('AC13_052018.sas7bdat')
+all_pheno = read.sas7bdat(paste0(path, '/AC13_052018.sas7bdat'))
 
 # participants with DNAm data
 all_pheno_DNam = all_pheno[all_pheno$ID2 %in% pheno$ID2,]
@@ -175,11 +178,13 @@ PBMC_pheno$exposed = factor(PBMC_pheno$exposed, levels = c('no', 'yes'))
 PBMC_pheno$predictedSex = factor(PBMC_pheno$predictedSex, levels = c('F', 'M'))
 PBMC_pheno$smoking = factor(PBMC_pheno$smoking, levels = c('no', 'yes'))
 
-write.csv(PBMC_pheno, file = 'PBMC_fun_pheno_withAges.csv')
+write.csv(PBMC_pheno, file = paste0(path, '/PBMC_fun_pheno_withAges.csv'))
 ```
 
 ### Scatter plots of Horvath clocks and age
 ```{r, message=FALSE, warning=FALSE, eval=F, echo = F}
+PBMC_pheno = read.csv(paste0(path, '/PBMC_fun_pheno_withAges.csv'))
+
 # DNAmAge
 cor.test(PBMC_pheno$age, PBMC_pheno$DNAmAge)
 # r = 0.6172555, p = 2.845e-05
@@ -239,11 +244,11 @@ labs(title = expression(paste('r = -0.69, ', italic('p'), ' < 0.001')), x = 'Chr
 theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
 
 grid.arrange(scatter_DNAmAge_PBMC, scatter_DNAmAgeHannum_PBMC, scatter_DNAmPhenoAge_PBMC, scatter_DNAmAgeSkinBloodClock_PBMC, scatter_DNAmGrimAge_PBMC, scatter_DNAmTL_PBMC, ncol = 3)
-quartz.save(file = 'PBMC_clocks_scatterPlots.png', type = 'png', dpi = 300)
+# quartz.save(file = paste0(path, '/PBMC_clocks_scatterPlots.png'), type = 'png', dpi = 300)
 ```
 
 ```{r, echo = F, out.width = '100%', echo = F}
-knitr::include_graphics("PBMC_clocks_scatterPlots.png")
+grid.arrange(scatter_DNAmAge_PBMC, scatter_DNAmAgeHannum_PBMC, scatter_DNAmPhenoAge_PBMC, scatter_DNAmAgeSkinBloodClock_PBMC, scatter_DNAmGrimAge_PBMC, scatter_DNAmTL_PBMC, ncol = 3)
 ```
 
 ### Linear models of associations between age acceleration and exposure (dichotomized)
@@ -289,7 +294,7 @@ mean = PBMC_dfAge_robust$B_adj[-6]
 lower = PBMC_dfAge_robust$lower_adj[-6]
 upper = PBMC_dfAge_robust$upper_adj[-6]
 
-df <- data.frame(label, mean, lower, upper)
+df = data.frame(label, mean, lower, upper)
 
 # reverses the factor level ordering for labels after coord_flip()
 df$label = factor(df$label, levels=rev(df$label))
@@ -308,64 +313,12 @@ fp_PBMCs_robust = ggplot(data=df, aes(x=label, y=mean, ymin=lower, ymax=upper)) 
         axis.title.x = element_text(size=8),
         axis.title.y=element_text(size=8.5)) +
   ylim(-3, 11)
-quartz.save(file = 'PBMC_ageAccelAssoc_forestPlots_robust.png', type = 'png', dpi = 300)
-
-# Raincloud plots
-marker = NULL
-y_axis = NULL
-x_axis = NULL
-for(i in 1:nrow(PBMC_dfAge)){
-    marker = c(marker, rep(rownames(PBMC_dfAge)[i], times = nrow(PBMC_pheno)))
-    y_axis = c(y_axis, PBMC_pheno[[rownames(PBMC_dfAge)[i]]])
-    x_axis = c(x_axis, PBMC_pheno$exposed)
-}
-dfBox = data.frame(marker, y_axis, x_axis)
-
-for (i in 1:nrow(PBMC_dfAge)){
-    df_1x1 <- data_1x1(array_1 = dfBox$y_axis[dfBox$x_axis == 1 & dfBox$marker == rownames(PBMC_dfAge)[i]], 
-      array_2 = dfBox$y_axis[dfBox$x_axis == 2 & dfBox$marker == rownames(PBMC_dfAge)[i]], jit_distance = .05, jit_seed = 321)
-    df_1x1$jit = df_1x1$jit - 0.15
-    assign(paste0("plot_", rownames(PBMC_dfAge)[i]), raincloud_1x1(data = df_1x1,  
-      colors = (c('black','black')),  
-      fills = (c('#7E7E7E','#2F2F2F')),  
-      size = 0.5,  
-      alpha = .6,  
-      ort = 'v') + scale_x_continuous(breaks=c(1.25,2.25), labels=c("Not exposed", "Exposed"), limits=c(0.5, 3)) +
-  xlab("") + 
-  ylab(rownames(PBMC_dfAge)[i]) +
-  theme_classic())
-}
-
-grid.arrange(plot_AgeAccelerationResidual, plot_AgeAccelerationResidualHannum, plot_AgeAccelPheno, plot_DNAmAgeSkinBloodClockAdjAge, plot_AgeAccelGrim, plot_IEAA, plot_EEAA, plot_DNAmTLAdjAge, nrow = 3) 
-quartz.save(file = 'PBMC_ageAccel_rainCloudPlots.png', type = 'png', dpi = 300)
-
-# plot phenoAge only
-i = 3
-dfBox$x_axis = factor(dfBox$x_axis, levels = c(2,1)) # reverse order of exposed and unexposed
-df_1x1 <- data_1x1(array_1 = dfBox$y_axis[dfBox$x_axis == 2 & dfBox$marker == rownames(PBMC_dfAge)[i]], 
-      array_2 = dfBox$y_axis[dfBox$x_axis == 1 & dfBox$marker == rownames(PBMC_dfAge)[i]], jit_distance = .07, jit_seed = 900)
-    df_1x1$jit = df_1x1$jit - 0.17
-    raincloud_1x1(data = df_1x1,  
-      colors = (c('black','black')),  
-      fills = (c('#3B7EA1','#FDB515')),  
-      size = 0.6,  
-      alpha = .9,  
-      ort = 'v') + scale_x_continuous(breaks=c(1.25,2.25), labels=c("Exposed", "Unexposed"), limits=c(0.7, 3)) +
-  xlab("") + 
-  ylab('PhenoAge acceleration (years)') +
-  theme_classic()
-quartz.save(file = 'PBMC_PhenoAgeAccel_rainCloudPlot.png', type = 'png', dpi = 300)
-
+# quartz.save(file = paste0(path, '/PBMC_ageAccelAssoc_forestPlots_robust.png'), type = 'png', dpi = 300)
 ```
 
 #### Adjusted robust linear regression results
 ```{r, echo = F, out.width = '75%'}
-knitr::include_graphics("PBMC_ageAccelAssoc_forestPlots_robust.png")
-```
-
-#### Raincloud plots
-```{r, echo = F, out.width = '100%'}
-knitr::include_graphics("PBMC_ageAccel_rainCloudPlots.png")
+fp_PBMCs_robust
 ```
 
 ### Robust linear models of associations between age acceleration and As concentration at birth (continuous)
@@ -387,6 +340,55 @@ PBMC_dfAge_adjLifeAv_robust = lmAge_robust(PBMC_pheno, 'exposed', c('AgeAccelera
 PBMC_dfAge_adjLifeAv_robust %>% kable() %>% kable_styling(font_size = 14) 
 ```
 
+### Rogust linear models of dichotomous exposure adjusting for sex, smoking, and cell type proportions
+```{r, message=FALSE, warning=FALSE, eval=F, echo = F}
+PBMC_dfAge_cell_robust = lmAge_robust(PBMC_pheno, 'exposed', c('AgeAccelerationResidual', 'AgeAccelerationResidualHannum', 'AgeAccelPheno', 'DNAmAgeSkinBloodClockAdjAge', 'AgeAccelGrim', 'DNAmTLAdjAge', 'IEAA', 'EEAA'), c('predictedSex', 'smoking', 'CD8T', 'CD4T', 'NK', 'Bcell', 'Mono', 'Gran'))
+```
+
+```{r, echo = F}
+PBMC_dfAge_cell_robust %>% kable() %>% kable_styling(font_size = 14) 
+```
+
+#### Plotting
+
+```{r, message=FALSE, warning=FALSE, eval=F, echo = F}
+# forest plot for adjusted robust linear regression results
+label = c('Horvath', 'Hannum', 'PhenoAge', 'Skin and Blood', 'GrimAge', 'IEAA', 'EEAA')
+mean = PBMC_dfAge_cell_robust$B_adj[-6]
+lower = PBMC_dfAge_cell_robust$lower_adj[-6]
+upper = PBMC_dfAge_cell_robust$upper_adj[-6]
+
+df <- data.frame(label, mean, lower, upper)
+
+# reverses the factor level ordering for labels after coord_flip()
+df$label = factor(df$label, levels=rev(df$label))
+
+fp_PBMCs_robust_cell = ggplot(data=df, aes(x=label, y=mean, ymin=lower, ymax=upper)) +
+  geom_point(size=2) + 
+  geom_errorbar(size = 0.5, width = 0.3) + 
+  geom_hline(yintercept=0, lty=2) +  # add a dotted line at x=1 after flip
+  coord_flip() +  # flip coordinates (puts labels on y axis)
+  labs(x='Epigenetic Age Acceleration (EAA)')+
+  labs(y="Mean age acceleration (years), exposed vs. unexposed") +
+  ggtitle("Adjusting for sex, smoking, and cell type")+
+  theme_classic()        + # use a white background
+  theme(plot.title = element_text(size=8.6, hjust = 0.5),panel.grid.major.x = element_blank(),
+        axis.text.y = element_text(size=8),
+        axis.title.x = element_text(size=8),
+        axis.title.y=element_text(size=8.5)) +
+        ylim(c(-3.5,10))
+
+# quartz.save(file = paste0(path, '/PBMC_ageAccelAssoc_forestPlots_robust_cell.png'), type = 'png', dpi = 300)
+
+# combine plots
+grid.arrange(fp_PBMCs_robust, fp_PBMCs_robust_cell, ncol = 2)
+# quartz.save(file = paste0(path, '/PBMC_ageAccelAssoc_forestPlots_robust_combined.png'), type = 'png', dpi = 300)
+```
+
+```{r, echo = F, out.width = '75%'}
+fp_PBMCs_robust_cell
+```
+
 
 ## Buccal cells
 
@@ -398,7 +400,7 @@ PBMC_dfAge_adjLifeAv_robust %>% kable() %>% kable_styling(font_size = 14)
 rm(ageAnno, betas_fun, betas_fun_reduced, funnorm, pheno, RGset)
 
 # load RGset
-load("buccal_RGset.rdata")
+load(paste0(path, "/buccal_RGset.rdata"))
 
 # B14's detection p-values are significantly larger
 RGset = RGset[,-26]
@@ -427,7 +429,7 @@ table(pheno$sex, pheno$predictedSex)
   # M  1 20  d
 
 # save the processed betas and pheno data
-save(betas_fun, pheno, file = "buccalCells_betas_funnorm_pheno.RData")
+save(betas_fun, pheno, file = paste0(path, "/buccalCells_betas_funnorm_pheno.RData"))
 ```
 
 ###$ Process data for dnamage
@@ -462,7 +464,7 @@ sum(is.na(betas_fun_reduced[,2]))
 # 2558
 
 # save filtered probes
-write.table(betas_fun_reduced,"buccalCells_Betas_funnorm_reduced_for_clock.csv", row.names=F, sep="," )
+write.table(betas_fun_reduced, paste0(path, "/buccalCells_Betas_funnorm_reduced_for_clock.csv"), row.names=F, sep="," )
 
 # pheno/annotation file
 pheno$Female[pheno$sex == 'F'] = 1
@@ -476,14 +478,14 @@ identical(ageAnno$ID, colnames(betas_fun_reduced)[-1])
 # TRUE
 
 # save annotation file
-write.table(ageAnno,"buccalCells_anno_for_clock.csv", row.names=F, sep="," )
+write.table(ageAnno, paste0(path, "/buccalCells_anno_for_clock.csv"), row.names=F, sep="," )
 ```
 
 #### DNA methylation age calculator
 
 ```{r, message=FALSE, warning=FALSE, eval=F}
 # load result
-buccalCell_age = read.csv('buccalCells_Betas_funnorm_reduced_for_clock.output.csv')
+buccalCell_age = read.csv(paste0(path, '/buccalCells_Betas_funnorm_reduced_for_clock.output.csv'))
 buccalCell_age$SampleID = substr(buccalCell_age$SampleID, 2, nchar(buccalCell_age$SampleID))
 
 all(buccalCell_age$SampleID == pheno$sample_name)
@@ -518,7 +520,7 @@ table(pheno$sex, pheno$predictedSex)
 pheno$ID2 = as.numeric(substring(pheno$study_id, 3, 9))
 
 # add additional exposure variables and rename pheno
-all_pheno = read.sas7bdat('AC13_052018.sas7bdat')
+all_pheno = read.sas7bdat(paste0(path, '/AC13_052018.sas7bdat'))
 
 # participants with DNAm data
 all_pheno_DNam = all_pheno[all_pheno$ID2 %in% pheno$ID2,]
@@ -533,57 +535,77 @@ buccalCell_pheno$exposed = factor(buccalCell_pheno$exposed, levels = c('no', 'ye
 buccalCell_pheno$predictedSex = factor(buccalCell_pheno$predictedSex, levels = c('F', 'M'))
 buccalCell_pheno$smoking = factor(buccalCell_pheno$smoking, levels = c('no', 'yes'))
 
-write.csv(buccalCell_pheno, 'buccalCell_fun_pheno_withAges.csv')
+write.csv(buccalCell_pheno, paste0(path, '/buccalCell_fun_pheno_withAges.csv'))
 ```
 
 ### Scatter plots of Horvath clocks and age
 ```{r, message=FALSE, warning=FALSE, eval=F, echo = F}
+# buccalCell_pheno = read.csv(paste0(path, '/buccalCell_fun_pheno_withAges.csv'))
+
 # DNAmAge
 cor.test(buccalCell_pheno$age, buccalCell_pheno$DNAmAge)
 # r = 0.4612412, p = 0.003562
 mdae(buccalCell_pheno$DNAmAge, buccalCell_pheno$age)
 # 8.055889
-scatter_DNAmAge_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmAge)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'Horvath DNAm age') + coord_cartesian(ylim = c(21,52), clip = 'off') + theme(axis.title.x = element_blank()) + labs(title = expression(paste('r = 0.46, ', italic('p'), ' = 0.004, ', 'MAE = 8.06'))) + theme(plot.title = element_text(size=8.5)) + theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
+scatter_DNAmAge_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmAge)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + 
+geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'Horvath DNAm age') + coord_cartesian(ylim = c(21,52), clip = 'off') + 
+theme(axis.title.x = element_blank()) + labs(title = expression(paste('r = 0.46, ', italic('p'), ' = 0.004, ', 'MAE = 8.06'))) + theme(plot.title = element_text(size=8.5)) + 
+theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
 
 # DNAmAgeHannum
 cor.test(buccalCell_pheno$age, buccalCell_pheno$DNAmAgeHannum)
 # r = 0.4971326, p = 0.001497
 mdae(buccalCell_pheno$DNAmAgeHannum, buccalCell_pheno$age)
 # 3.889267
-scatter_DNAmAgeHannum_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmAgeHannum)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'Hannum DNAm age') + coord_cartesian(ylim = c(36,62), clip = 'off') + theme(axis.title.x = element_blank()) + labs(title = expression(paste('r = 0.50, ', italic('p'), ' = 0.001, ', 'MAE = 3.89'))) + theme(plot.title = element_text(size=8.5)) + theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
+scatter_DNAmAgeHannum_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmAgeHannum)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + 
+geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'Hannum DNAm age') + coord_cartesian(ylim = c(36,62), clip = 'off') + 
+theme(axis.title.x = element_blank()) + labs(title = expression(paste('r = 0.50, ', italic('p'), ' = 0.001, ', 'MAE = 3.89'))) + theme(plot.title = element_text(size=8.5)) + 
+theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
 
 # DNAmPhenoAge
 cor.test(buccalCell_pheno$age, buccalCell_pheno$DNAmPhenoAge)
 # r = 0.3858514, p = 0.01673
 mdae(buccalCell_pheno$DNAmPhenoAge, buccalCell_pheno$age)
 # 3.970065
-scatter_DNAmPhenoAge_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmPhenoAge)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'DNAm PhenoAge') + coord_cartesian(ylim = c(19,74), clip = 'off') + theme(axis.title.x = element_blank()) + labs(title = expression(paste('r = 0.39, ', italic('p'), ' = 0.017, ', 'MAE = 3.97'))) + theme(plot.title = element_text(size=8.5)) + theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
+scatter_DNAmPhenoAge_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmPhenoAge)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + 
+geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'DNAm PhenoAge') + coord_cartesian(ylim = c(19,74), clip = 'off') + 
+theme(axis.title.x = element_blank()) + labs(title = expression(paste('r = 0.39, ', italic('p'), ' = 0.017, ', 'MAE = 3.97'))) + theme(plot.title = element_text(size=8.5)) + 
+theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
 
 # DNAmAgeSkinBloodClock
 cor.test(buccalCell_pheno$age, buccalCell_pheno$DNAmAgeSkinBloodClock)
 # r = 0.7206731, p = 3.354e-07
 mdae(buccalCell_pheno$DNAmAgeSkinBloodClock, buccalCell_pheno$age)
 # 2.868919
-scatter_DNAmAgeSkinBloodClock_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmAgeSkinBloodClock)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'Skin and blood DNAm age') + coord_cartesian(ylim = c(34,63), clip = 'off') + labs(title = expression(paste('r = 0.72, ', italic('p'), ' < 0.001, ', 'MAE = 2.87')), x = 'Chronological age') + theme(plot.title = element_text(size=8.5)) + theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
+scatter_DNAmAgeSkinBloodClock_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmAgeSkinBloodClock)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + 
+geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'Skin and blood DNAm age') + coord_cartesian(ylim = c(34,63), clip = 'off') + 
+labs(title = expression(paste('r = 0.72, ', italic('p'), ' < 0.001, ', 'MAE = 2.87')), x = 'Chronological age') + theme(plot.title = element_text(size=8.5)) + 
+theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
 
 # DNAmGrimAge
 cor.test(buccalCell_pheno$age, buccalCell_pheno$DNAmGrimAge)
 # r = 0.6625884, p = 5.847e-06
 mdae(buccalCell_pheno$DNAmGrimAge, buccalCell_pheno$age)
 # 11.11323
-scatter_DNAmGrimAge_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmGrimAge)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'DNAm GrimAge') + coord_cartesian(ylim = c(47,73), clip = 'off') + labs(title = expression(paste('r = 0.66, ', italic('p'), ' < 0.001, ', 'MAE = 11.11')), x = 'Chronological age') + theme(plot.title = element_text(size=8.5)) + theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
+scatter_DNAmGrimAge_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmGrimAge)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + 
+geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'DNAm GrimAge') + coord_cartesian(ylim = c(47,73), clip = 'off') + 
+labs(title = expression(paste('r = 0.66, ', italic('p'), ' < 0.001, ', 'MAE = 11.11')), x = 'Chronological age') + theme(plot.title = element_text(size=8.5)) + 
+theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
 
 # DNAmTL
 cor.test(buccalCell_pheno$age, buccalCell_pheno$DNAmTL)
 # r = -0.3875084, p = 0.01623
-scatter_DNAmTL_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmTL)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'DNAm telomere length') + coord_cartesian(ylim = c(5.25, 7.5), clip = 'off') + labs(title = expression(paste('r = -0.39, ', italic('p'), ' = 0.016')), x = 'Chronological age') + theme(plot.title = element_text(size=8.5)) + theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
+scatter_DNAmTL_buccalCell = ggplot(buccalCell_pheno, aes(age, DNAmTL)) + geom_smooth(method = 'lm', alpha = 0.2, size = 0.5, color = 'black') + 
+geom_point(size = 0.75) + theme_classic() + labs(x = 'Chronological age (years)', y = 'DNAm telomere length') + coord_cartesian(ylim = c(5.25, 7.5), clip = 'off') + 
+labs(title = expression(paste('r = -0.39, ', italic('p'), ' = 0.016')), x = 'Chronological age') + theme(plot.title = element_text(size=8.5)) + 
+theme(text = element_text(size = 8)) + theme(plot.title = element_text(hjust = 0.5))
 
 grid.arrange(scatter_DNAmAge_buccalCell, scatter_DNAmAgeHannum_buccalCell, scatter_DNAmPhenoAge_buccalCell, scatter_DNAmAgeSkinBloodClock_buccalCell, scatter_DNAmGrimAge_buccalCell, scatter_DNAmTL_buccalCell, ncol = 3)
-quartz.save(file = 'buccalCell_clocks_scatterPlots.png', type = 'png', dpi = 300)
+# quartz.save(file = paste0(path, '/buccalCell_clocks_scatterPlots.png'), type = 'png', dpi = 300)
 ```
 
 ```{r, echo = F, out.width = '100%', echo = F}
-knitr::include_graphics("buccalCell_clocks_scatterPlots.png")
+grid.arrange(scatter_DNAmAge_buccalCell, scatter_DNAmAgeHannum_buccalCell, scatter_DNAmPhenoAge_buccalCell, scatter_DNAmAgeSkinBloodClock_buccalCell, scatter_DNAmGrimAge_buccalCell, scatter_DNAmTL_buccalCell, ncol = 3)
 ```
 
 ### Linear models of associations between age acceleration and exposure
@@ -612,7 +634,7 @@ df <- data.frame(label, mean, lower, upper)
 # reverses the factor level ordering for labels after coord_flip()
 df$label = factor(df$label, levels=rev(df$label))
 
-fp_PBMCs_robust = ggplot(data=df, aes(x=label, y=mean, ymin=lower, ymax=upper)) +
+fp_buccalcells_robust = ggplot(data=df, aes(x=label, y=mean, ymin=lower, ymax=upper)) +
   geom_point(size=2) + 
   geom_errorbar(size = 0.5, width = 0.3) + 
   geom_hline(yintercept=0, lty=2) +  # add a dotted line at x=1 after flip
@@ -625,46 +647,13 @@ fp_PBMCs_robust = ggplot(data=df, aes(x=label, y=mean, ymin=lower, ymax=upper)) 
         axis.text.y = element_text(size=8),
         axis.title.x = element_text(size=8),
         axis.title.y=element_text(size=8.5)) 
-quartz.save(file = 'buccalCell_ageAccelAssoc_forestPlots_robust.png', type = 'png', dpi = 300)
+# quartz.save(file = paste0(path, '/buccalCell_ageAccelAssoc_forestPlots_robust.png'), type = 'png', dpi = 300)
 
-# Raincloud plots
-marker = NULL
-y_axis = NULL
-x_axis = NULL
-for(i in 1:nrow(buccalCell_dfAge)){
-    marker = c(marker, rep(rownames(buccalCell_dfAge)[i], times = nrow(buccalCell_pheno)))
-    y_axis = c(y_axis, buccalCell_pheno[[rownames(buccalCell_dfAge)[i]]])
-    x_axis = c(x_axis, buccalCell_pheno$exposed)
-}
-dfBox = data.frame(marker, y_axis, x_axis)
-
-for (i in 1:nrow(buccalCell_dfAge)){
-    df_1x1 <- data_1x1(array_1 = dfBox$y_axis[dfBox$x_axis == 1 & dfBox$marker == rownames(buccalCell_dfAge)[i]], 
-      array_2 = dfBox$y_axis[dfBox$x_axis == 2 & dfBox$marker == rownames(PBMC_dfAge)[i]], jit_distance = .05, jit_seed = 321)
-    df_1x1$jit = df_1x1$jit - 0.15
-    assign(paste0("plot_", rownames(buccalCell_dfAge)[i]), raincloud_1x1(data = df_1x1,  
-      colors = (c('black','black')),  
-      fills = (c('#7E7E7E','#2F2F2F')),  
-      size = 0.5,  
-      alpha = .6,  
-      ort = 'v') + scale_x_continuous(breaks=c(1.25,2.25), labels=c("Not exposed", "Exposed"), limits=c(0.5, 3)) +
-  xlab("") + 
-  ylab(rownames(buccalCell_dfAge)[i]) +
-  theme_classic())
-}
-
-grid.arrange(plot_AgeAccelerationResidual, plot_AgeAccelerationResidualHannum, plot_AgeAccelPheno, plot_DNAmAgeSkinBloodClockAdjAge, plot_AgeAccelGrim, plot_IEAA, plot_EEAA, plot_DNAmTLAdjAge, nrow = 3) 
-quartz.save(file = 'buccalCell_ageAccel_rainCloudPlots.png', type = 'png', dpi = 300)
 ```
 
 #### Adjusted robust linear regression results
 ```{r, echo = F, out.width = '75%'}
-knitr::include_graphics("buccalCell_ageAccelAssoc_forestPlots_robust.png")
-```
-
-#### Raincloud plots
-```{r, echo = F, out.width = '100%'}
-knitr::include_graphics("buccalCell_ageAccel_rainCloudPlots.png")
+fp_buccalcells_robust
 ```
 
 
@@ -702,7 +691,12 @@ grid.arrange(header1,titles1,g1,titles2,g2,header2,titles1,g3,titles2,g4,nrow=10
 quartz.save(file = 'all_clocks_scatterPlots_long.png', type = 'png', dpi = 300)
 
 # forest plots
-# fp_buccalCell2 = fp_buccalCell + theme(axis.title.y = element_blank())
-# grid.arrange(fp_PBMCs, fp_buccalCell2, ncol = 2)
-# quartz.save(file = 'all_ageAccelAssoc_forestPlots.png', type = 'png', dpi = 300)
+fp_buccalcells_robust2 = fp_buccalcells_robust + theme(axis.title.y = element_blank())
+grid.arrange(fp_PBMCs_robust, fp_buccalcells_robust2, ncol = 2)
+# quartz.save(file = paste0(path, '/all_ageAccelAssoc_forestPlots.png'), type = 'png', dpi = 300)
+
+# forest plots
+fp_buccalcells_robust2 = fp_buccalcells_robust + theme(axis.title.y = element_blank())
+grid.arrange(fp_PBMCs_robust, fp_buccalcells_robust2, ncol = 2)
+# quartz.save(file = paste0(path, '/all_ageAccelAssoc_forestPlots.png'), type = 'png', dpi = 300)
 ```
