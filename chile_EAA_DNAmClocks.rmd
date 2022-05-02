@@ -31,7 +31,7 @@ library(sandwich)
 
 #### Normalization using funnorm
 ```{r, eval=FALSE, echo = TRUE}
-path = file.path('/Users/annebozack/Box/Chile_arsenic_epigenetic_aging')
+# path = file.path()
 
 # load RGset
 load(paste0(path, "/pmbcs_RGset.rdata"))
